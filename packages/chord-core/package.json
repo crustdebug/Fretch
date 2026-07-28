@@ -1,0 +1,15 @@
+{
+  "name": "@reelchords/chord-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chord-grammar validation, OCR error correction, and ChordPro assembly. Runs in both browser and Lambda; zero runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

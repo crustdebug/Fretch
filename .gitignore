@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+dist/
+build/
+.output/
+*.tsbuildinfo
+
+# secrets — never commit these
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+
+# cloud tooling
+.wrangler/
+.aws-sam/
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# spike artifacts: large media + generated frames.
+# The scripts and FINDINGS docs ARE tracked; their outputs are not.
+spike/out/
+spike/__pycache__/
+__pycache__/
+*.pyc
+
+# editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*

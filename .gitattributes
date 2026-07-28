@@ -1,0 +1,10 @@
+# Normalise line endings: LF in the repo, native in the working copy.
+# Keeps Windows development consistent with Linux CI.
+* text=auto eol=lf
+
+# Binary assets — never touch these.
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.mp3 binary
+*.woff2 binary
