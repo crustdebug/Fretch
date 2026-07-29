@@ -357,6 +357,11 @@ input:focus { outline: none; border-color: var(--accent); }
 .stage.active span { color: var(--ink); opacity: 1; font-weight: 600; }
 .stage.done .ring { background: var(--accent); border-color: var(--accent); }
 .stage.done span { opacity: 1; }
+.stage-detail {
+  font: 500 12px var(--font-mono);
+  font-style: normal;
+  color: var(--muted);
+}
 
 .proc-fail { text-align: center; }
 .proc-fail .glyph { font-size: 30px; margin-bottom: 12px; color: var(--muted); }
@@ -440,6 +445,17 @@ input:focus { outline: none; border-color: var(--accent); }
 .pair .lyric { font-size: 15.5px; white-space: pre-wrap; }
 
 .sheet-comment { color: var(--muted); font-size: 12.5px; margin: 4px 0; }
+
+/* Bare progression (no lyrics): chords as spaced chips, not stacked pairs. */
+.chordrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.chordchip {
+  font: 700 14px var(--font-mono);
+  color: var(--accent);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
 
 .sheet-actions {
   display: flex;

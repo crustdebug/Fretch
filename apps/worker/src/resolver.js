@@ -9,6 +9,13 @@
  */
 
 export const INSTAGRAM_URL_RE = /^https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels|p)\/[\w-]+/;
+export const YOUTUBE_URL_RE =
+  /^https?:\/\/(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]{6,}/;
+
+/** Any source we can attempt to resolve server-side. */
+export function isSupportedUrl(url) {
+  return INSTAGRAM_URL_RE.test(url) || YOUTUBE_URL_RE.test(url);
+}
 
 /**
  * Find a video URL in an arbitrary provider response.

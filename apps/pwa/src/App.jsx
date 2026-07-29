@@ -120,7 +120,7 @@ export default function App() {
         if (!res) return setShareState('failed');
         const blob = await res.blob();
         const name = decodeURIComponent(res.headers.get('X-File-Name') || 'shared-video');
-        setVideo({ name, size: blob.size, type: blob.type, blobUrl: URL.createObjectURL(blob) });
+        setVideo({ name, blob, size: blob.size, type: blob.type, blobUrl: URL.createObjectURL(blob) });
         await cache.delete('/shared/video');
       } else if (share === 'text') {
         const res = await cache.match('/shared/text');
@@ -155,14 +155,16 @@ export default function App() {
         const media = await fetch(proxyUrl);
         if (!media.ok) throw new Error(`media ${media.status}`);
         const blob = await media.blob();
-        setVideo({
+        const fetched = {
           name: 'instagram-reel.mp4',
+          blob,
           size: blob.size,
           type: blob.type || 'video/mp4',
           blobUrl: URL.createObjectURL(blob),
-        });
+        };
+        setVideo(fetched);
         setIgFetch('idle');
-        setJob({ id: linkInfo.id, label: linkInfo.url });
+        setJob({ id: linkInfo.id, label: linkInfo.url, blob, blobUrl: fetched.blobUrl });
         setView('processing');
       } catch {
         setIgFetch('failed');
@@ -170,18 +172,49 @@ export default function App() {
       return;
     }
 
-    const input = video
-      ? { id: `file-${video.name}-${video.size}`, label: video.name }
-      : { id: linkInfo.id, label: link.trim() };
-    setJob(input);
-    setView('processing');
+    if (video) {
+      setJob({
+        id: `file-${video.name}-${video.size}`,
+        label: video.name,
+        blob: video.blob,
+        blobUrl: video.blobUrl,
+      });
+      setView('processing');
+      return;
+    }
+
+    // YouTube: resolve server-side to a playable URL, then process the bytes
+    // exactly like any other video.
+    setIgFetch('fetching');
+    try {
+      const res = await fetch('/api/resolve', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: linkInfo.url }),
+      });
+      if (!res.ok) throw new Error(`resolve ${res.status}`);
+      const { proxyUrl } = await res.json();
+      const media = await fetch(proxyUrl);
+      if (!media.ok) throw new Error(`media ${media.status}`);
+      const blob = await media.blob();
+      setIgFetch('idle');
+      setJob({
+        id: linkInfo.id,
+        label: link.trim(),
+        blob,
+        blobUrl: URL.createObjectURL(blob),
+      });
+      setView('processing');
+    } catch {
+      setIgFetch('failed');
+    }
   }
 
   function onPickFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setShareState(null);
-    setVideo({ name: file.name, size: file.size, type: file.type, blobUrl: URL.createObjectURL(file) });
+    setVideo({ name: file.name, blob: file, size: file.size, type: file.type, blobUrl: URL.createObjectURL(file) });
   }
 
   const topbar = (

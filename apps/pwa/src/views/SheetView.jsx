@@ -18,7 +18,11 @@ export default function SheetView({ result, onBack }) {
   );
   const sheet = useMemo(() => parseChordPro(chordpro), [chordpro]);
 
-  const identified = Boolean(sheet.title ?? result.title);
+  // stats.identified is authoritative when the pipeline produced it; saved
+  // songs predate it, so fall back to whether a title exists.
+  const identified = result.stats
+    ? result.stats.identified
+    : Boolean(sheet.title ?? result.title);
   const keyLabel = sheet.key
     ? sheet.key
     : semitones === 0
@@ -48,16 +52,21 @@ export default function SheetView({ result, onBack }) {
         {identified ? (
           <>
             <h2>{sheet.title ?? result.title}</h2>
-            <div className="sub">
-              {sheet.artist ?? result.artist}
-              {result.confidence && <> · {(result.confidence * 100) | 0}% match</>}
-            </div>
+            {(sheet.artist ?? result.artist) && (
+              <div className="sub">{sheet.artist ?? result.artist}</div>
+            )}
           </>
         ) : (
           <>
             <h2 className="unknown">Song not identified</h2>
             <div className="sub">The chords came through — add a title yourself</div>
           </>
+        )}
+        {result.stats && (
+          <div className="sub">
+            {result.stats.chords} chord{result.stats.chords === 1 ? '' : 's'} from{' '}
+            {result.stats.frames} frames
+          </div>
         )}
       </div>
 
@@ -74,10 +83,27 @@ export default function SheetView({ result, onBack }) {
         {sheet.sections.map((section, si) => (
           <div key={si} className="section">
             {section.name && <div className="section-label">{section.name}</div>}
-            {section.items.map((item, ii) =>
-              item.type === 'comment' ? (
-                <p key={ii} className="sheet-comment">{item.text}</p>
-              ) : (
+            {section.items.map((item, ii) => {
+              if (item.type === 'comment') {
+                return <p key={ii} className="sheet-comment">{item.text}</p>;
+              }
+              // A line whose segments carry no lyric text is a bare
+              // progression (no song identified, or no lyrics found). Chord-
+              // above-lyric layout collapses to illegible mush there, so
+              // render those as spaced chord chips instead.
+              const hasLyrics = item.segments.some((s) => s.text.trim());
+              if (!hasLyrics) {
+                return (
+                  <div key={ii} className="chordrow">
+                    {item.segments
+                      .filter((s) => s.chord)
+                      .map((seg, gi) => (
+                        <span key={gi} className="chordchip">{seg.chord}</span>
+                      ))}
+                  </div>
+                );
+              }
+              return (
                 <div key={ii} className="chordline">
                   {item.segments.map((seg, gi) => (
                     <span key={gi} className="pair">
@@ -86,8 +112,8 @@ export default function SheetView({ result, onBack }) {
                     </span>
                   ))}
                 </div>
-              ),
-            )}
+              );
+            })}
           </div>
         ))}
       </div>

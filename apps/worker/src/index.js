@@ -17,8 +17,16 @@
  * without a provider account.
  */
 
-import { INSTAGRAM_URL_RE, extractVideoUrl, resolveInstagram, ResolverError } from './resolver.js';
+import {
+  INSTAGRAM_URL_RE,
+  YOUTUBE_URL_RE,
+  isSupportedUrl,
+  extractVideoUrl,
+  resolveInstagram,
+  ResolverError,
+} from './resolver.js';
 import { signMediaUrl, verifyMediaUrl } from './sign.js';
+import { identifySong, fetchLyrics } from './music.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
@@ -39,6 +47,12 @@ export default {
     if (url.pathname === '/api/debug-resolve' && request.method === 'GET') {
       return handleDebugResolve(url, env);
     }
+    if (url.pathname === '/api/identify' && request.method === 'POST') {
+      return handleIdentify(request, env);
+    }
+    if (url.pathname === '/api/lyrics' && request.method === 'GET') {
+      return handleLyrics(url);
+    }
     if (url.pathname.startsWith('/api/')) {
       return json({ error: 'not-found' }, 404);
     }
@@ -54,13 +68,19 @@ async function handleResolve(request, env) {
     return json({ error: 'bad-request' }, 400);
   }
 
-  if (typeof reelUrl !== 'string' || !INSTAGRAM_URL_RE.test(reelUrl.trim())) {
-    return json({ error: 'not-an-instagram-url' }, 400);
+  if (typeof reelUrl !== 'string' || !isSupportedUrl(reelUrl.trim())) {
+    return json({ error: 'unsupported-url' }, 400);
   }
 
   // Dev shortcut: serve a known same-origin file as the "video".
   if (env.RESOLVER_MOCK_URL) {
     return json({ proxyUrl: env.RESOLVER_MOCK_URL, mock: true });
+  }
+
+  // YouTube needs a different provider than the Instagram one; until that's
+  // configured, say so plainly rather than sending it to the wrong API.
+  if (YOUTUBE_URL_RE.test(reelUrl.trim()) && !env.YOUTUBE_RESOLVER_HOST) {
+    return json({ error: 'youtube-resolver-not-configured' }, 502);
   }
 
   try {
@@ -150,6 +170,43 @@ async function handleMedia(url, env) {
       'cache-control': 'private, max-age=600',
     },
   });
+}
+
+/**
+ * Identify a song from an uploaded audio clip.
+ *
+ * Never fails the request: an unidentified song is a normal outcome (the
+ * chords are still the product), so this answers 200 with song:null rather
+ * than an error the client has to special-case.
+ */
+async function handleIdentify(request, env) {
+  try {
+    const audio = await request.blob();
+    if (!audio || audio.size === 0) return json({ song: null, reason: 'no-audio' });
+    // AudD's own limit is generous; this guards against a runaway upload.
+    if (audio.size > 5_000_000) return json({ song: null, reason: 'audio-too-large' });
+
+    const song = await identifySong(audio, env);
+    return json({ song, reason: song ? undefined : 'no-match' });
+  } catch (err) {
+    console.error('identify failed:', err?.message ?? err);
+    return json({ song: null, reason: 'identify-failed' });
+  }
+}
+
+/** Proxy LRCLIB (no CORS headers of its own, so browsers need us). */
+async function handleLyrics(url) {
+  const title = url.searchParams.get('title') ?? '';
+  const artist = url.searchParams.get('artist') ?? '';
+  if (!title) return json({ lyrics: null, reason: 'no-title' }, 400);
+
+  try {
+    const lyrics = await fetchLyrics(title, artist);
+    return json({ lyrics, reason: lyrics ? undefined : 'not-found' });
+  } catch (err) {
+    console.error('lyrics failed:', err?.message ?? err);
+    return json({ lyrics: null, reason: 'lyrics-failed' });
+  }
 }
 
 function requireSigningKey(env) {
