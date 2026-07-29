@@ -232,7 +232,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .panel--guide { background: var(--warn-bg); border-color: #e9dfae; }
 .panel--guide .url { color: var(--warn); font-weight: 600; margin-bottom: 6px; font-size: 12.5px; }
 .panel--guide p { margin: 0; }
-.panel--guide p + p { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+.panel--guide ol { margin: 8px 0; padding-left: 20px; }
+.panel--guide li { margin: 5px 0; line-height: 1.55; }
+.panel--guide .fine { color: var(--muted); font-size: 12px; }
 .panel--dim { background: var(--surface); }
 .panel--dim strong { color: var(--ink); }
 .panel--dim span { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }

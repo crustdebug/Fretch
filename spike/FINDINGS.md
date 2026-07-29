@@ -78,6 +78,23 @@ itself**, not just a link.
 | Share **video/file** | actual video bytes | ✅ works — no fetch, no credentials, no ToS issue |
 | Share **link** | `instagram.com/reel/...` URL | ❌ blocked — would require server-side fetch |
 
+### Real-device addendum (2026-07-29)
+
+Tested on actual Android hardware with the deployed PWA. Two results:
+
+1. **The share-target plumbing works end-to-end** — Instagram → Share →
+   ReelChords opened the app with the shared content. ✅
+2. **Instagram's share sheet only ever shares the URL**, never the video
+   file. The "share the video itself" option assumed above does not exist
+   inside Instagram's own share flow.
+
+The working path costs one extra tap, entirely within Instagram:
+**Share → Download** (saves the reel to the gallery), then share the saved
+file from the gallery — gallery apps DO hand over real bytes — or pick it
+with the in-app file chooser. The app's Instagram-link guidance teaches
+this flow. Caveat: Download is unavailable on some reels (private accounts,
+creator opt-out); a screen recording is the universal fallback.
+
 So the PWA manifest's `share_target` must accept `video/*` files, **not only
 `text/plain`**. User experience is unchanged (share reel → chords appear);
 the implementation avoids the scraper entirely.

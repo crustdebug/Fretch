@@ -266,8 +266,12 @@ export default function App() {
           {linkInfo.kind === 'instagram' && (
             <div className="panel panel--guide">
               <div className="url">{truncateUrl(link.trim())}</div>
-              <p>Instagram links can't be fetched directly.</p>
-              <p>Open the reel, tap Share, then choose ReelChords to send the video itself.</p>
+              <p><strong>Instagram shares a link — and links can't be fetched.</strong></p>
+              <ol>
+                <li>In Instagram, tap <strong>Share → Download</strong> to save the reel to your gallery.</li>
+                <li>Come back here and <strong>Choose a video</strong> — or share the saved video from your gallery to ReelChords.</li>
+              </ol>
+              <p className="fine">No Download button on that reel? A screen recording works too — the chords just need to be visible.</p>
             </div>
           )}
           {linkInfo.kind === 'unknown-url' && (

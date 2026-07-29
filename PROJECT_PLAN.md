@@ -150,9 +150,16 @@ flowchart TD
 
 | Entry point | App receives | Works? |
 |---|---|---|
-| Share **video file** (Android) / upload (all) | video bytes | ✅ primary |
+| Share **video file** from gallery / upload (all) | video bytes | ✅ primary |
 | **YouTube Shorts** URL | URL, fetched server-side | ✅ verified in spike |
 | **Instagram** URL | URL | ❌ can't fetch — show guidance |
+
+> **Real-device correction (2026-07-29):** Instagram's own share sheet only
+> shares the URL — it never offers the video file to external apps. The
+> working flow is one extra tap: Instagram **Share → Download** (saves to
+> gallery), then share the saved file from the gallery to ReelChords or pick
+> it in-app. The share-target plumbing itself was verified working on real
+> Android hardware. See spike/FINDINGS.md addendum.
 
 The manifest declares `share_target` with `accept: ["video/*"]` **and**
 `text/plain`, so Android offers the app for both. iOS ignores share targets
