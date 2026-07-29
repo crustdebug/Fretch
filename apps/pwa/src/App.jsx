@@ -66,11 +66,32 @@ function useInstall() {
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   return {
-    canInstall: Boolean(promptEvent),
-    install: () => promptEvent?.prompt(),
-    showIosHint: isIos && !standalone,
+    nativePrompt: promptEvent ? () => promptEvent.prompt() : null,
+    isIos,
     standalone,
   };
+}
+
+/**
+ * Fallback install instructions, shown when the browser hasn't offered the
+ * native prompt (Firefox/Safari never do; Chrome only on the installed-and-
+ * eligible HTTPS origin).
+ */
+function InstallHelp({ onClose }) {
+  return (
+    <div className="install-help">
+      <div className="install-help-head">
+        <strong>Install ReelChords</strong>
+        <button className="linklike" onClick={onClose}>Close</button>
+      </div>
+      <ul>
+        <li><strong>Android (Chrome):</strong> tap ⋮ → “Add to Home screen” → Install.</li>
+        <li><strong>iPhone (Safari):</strong> tap Share → “Add to Home Screen”.</li>
+        <li><strong>Desktop (Chrome/Edge):</strong> install icon at the right of the address bar, or ⋮ → “Cast, save and share” → “Install page as app”.</li>
+      </ul>
+      <p>Installing on Android is what makes ReelChords appear in the share sheet.</p>
+    </div>
+  );
 }
 
 export default function App() {
@@ -80,7 +101,8 @@ export default function App() {
   const [shareState, setShareState] = useState(null); // null | 'failed'
   const [job, setJob] = useState(null);
   const [result, setResult] = useState(null);
-  const { canInstall, install, showIosHint } = useInstall();
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const { nativePrompt, standalone } = useInstall();
 
   // Collect anything the service worker left in the share inbox
   // (i.e. the app was opened from the Android share sheet).
@@ -129,16 +151,22 @@ export default function App() {
   }
 
   const topbar = (
-    <header className="topbar">
-      <span className="wordmark">
-        ReelChords<span className="dot">.</span>
-      </span>
-      {canInstall && (
-        <button className="installbtn" onClick={install}>
-          Install app
-        </button>
-      )}
-    </header>
+    <>
+      <header className="topbar">
+        <span className="wordmark">
+          ReelChords<span className="dot">.</span>
+        </span>
+        {!standalone && (
+          <button
+            className="installbtn"
+            onClick={() => (nativePrompt ? nativePrompt() : setShowInstallHelp((s) => !s))}
+          >
+            Install app
+          </button>
+        )}
+      </header>
+      {showInstallHelp && <InstallHelp onClose={() => setShowInstallHelp(false)} />}
+    </>
   );
 
   const nav = (
@@ -202,12 +230,6 @@ export default function App() {
           <p className="sub">Reads the chords the creator put on screen.</p>
         </div>
 
-        {showIosHint && (
-          <p className="ios-hint">
-            To install on iPhone: tap Share, then “Add to Home Screen”.
-          </p>
-        )}
-
         <div className="home-body">
           {video ? (
             <div className="videocard">
@@ -263,9 +285,7 @@ export default function App() {
             onChange={(e) => setLink(e.target.value)}
             spellCheck={false}
           />
-        </div>
 
-        <div className="home-cta">
           <button className="pill pill--primary" disabled={!canProcess} onClick={startProcessing}>
             Get the chords
           </button>
