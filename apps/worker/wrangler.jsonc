@@ -1,0 +1,29 @@
+// ReelChords edge worker: API routes + static PWA hosting on one origin.
+//
+// Serving both from one Worker avoids CORS entirely — the app calls
+// /api/* relative to itself. Deploy (after building the PWA):
+//   npx wrangler deploy --config apps/worker/wrangler.jsonc
+//
+// Production configuration:
+//   wrangler secret put RESOLVER_API_KEY   (RapidAPI key)
+//   wrangler secret put SIGNING_KEY        (any long random string)
+//   vars RESOLVER_HOST / RESOLVER_PATH below or in the dashboard.
+{
+  "name": "reelchords",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "../pwa/dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    // API must always reach the script, never the SPA fallback.
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    // Hostname of the third-party Instagram resolver (RapidAPI-style).
+    // Providers churn; swapping providers should only mean changing these
+    // two values plus the secret — never code.
+    "RESOLVER_HOST": "",
+    "RESOLVER_PATH": "/"
+  }
+}

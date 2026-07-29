@@ -12,12 +12,13 @@ import SongbookView from './views/SongbookView.jsx';
  */
 
 const YOUTUBE_RE = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{6,})/;
-const INSTAGRAM_RE = /instagram\.com\/(?:reel|reels|p)\//;
+const INSTAGRAM_RE = /instagram\.com\/(?:reel|reels|p)\/([\w-]+)/;
 
 function classifyLink(raw) {
   const url = raw.trim();
   if (!url) return { kind: 'empty' };
-  if (INSTAGRAM_RE.test(url)) return { kind: 'instagram', url };
+  const ig = url.match(INSTAGRAM_RE);
+  if (ig) return { kind: 'instagram', url, id: `ig-${ig[1]}` };
   const yt = url.match(YOUTUBE_RE);
   if (yt) return { kind: 'youtube', url, id: `yt-${yt[1]}` };
   try {
@@ -133,9 +134,42 @@ export default function App() {
   }, []);
 
   const linkInfo = useMemo(() => classifyLink(link), [link]);
-  const canProcess = Boolean(video) || linkInfo.kind === 'youtube';
+  const [igFetch, setIgFetch] = useState('idle'); // idle | fetching | failed
+  const canProcess =
+    igFetch !== 'fetching' &&
+    (Boolean(video) || linkInfo.kind === 'youtube' || linkInfo.kind === 'instagram');
 
-  function startProcessing() {
+  async function startProcessing() {
+    if (!video && linkInfo.kind === 'instagram') {
+      // Try the server-side resolver first; the manual download guidance is
+      // the fallback, not the default (see spike/FINDINGS.md addendum).
+      setIgFetch('fetching');
+      try {
+        const res = await fetch('/api/resolve', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: linkInfo.url }),
+        });
+        if (!res.ok) throw new Error(`resolve ${res.status}`);
+        const { proxyUrl } = await res.json();
+        const media = await fetch(proxyUrl);
+        if (!media.ok) throw new Error(`media ${media.status}`);
+        const blob = await media.blob();
+        setVideo({
+          name: 'instagram-reel.mp4',
+          size: blob.size,
+          type: blob.type || 'video/mp4',
+          blobUrl: URL.createObjectURL(blob),
+        });
+        setIgFetch('idle');
+        setJob({ id: linkInfo.id, label: linkInfo.url });
+        setView('processing');
+      } catch {
+        setIgFetch('failed');
+      }
+      return;
+    }
+
     const input = video
       ? { id: `file-${video.name}-${video.size}`, label: video.name }
       : { id: linkInfo.id, label: link.trim() };
@@ -263,10 +297,20 @@ export default function App() {
               <span>{truncateUrl(link.trim())}</span>
             </div>
           )}
-          {linkInfo.kind === 'instagram' && (
+          {linkInfo.kind === 'instagram' && igFetch !== 'failed' && (
+            <div className="panel panel--ok">
+              <strong>✓ Instagram reel recognized</strong>
+              <span>
+                {igFetch === 'fetching'
+                  ? 'Fetching the video…'
+                  : 'We’ll fetch the video automatically. Private reels may not work.'}
+              </span>
+            </div>
+          )}
+          {linkInfo.kind === 'instagram' && igFetch === 'failed' && (
             <div className="panel panel--guide">
               <div className="url">{truncateUrl(link.trim())}</div>
-              <p><strong>Instagram shares a link — and links can't be fetched.</strong></p>
+              <p><strong>Automatic fetch didn't work for this reel.</strong></p>
               <ol>
                 <li>In Instagram, tap <strong>Share → Download</strong> to save the reel to your gallery.</li>
                 <li>Come back here and <strong>Choose a video</strong> — or share the saved video from your gallery to ReelChords.</li>
@@ -281,17 +325,17 @@ export default function App() {
             </div>
           )}
 
-          <div className="orlabel">or paste a YouTube Shorts link</div>
+          <div className="orlabel">or paste a YouTube Shorts / Instagram reel link</div>
           <input
             type="url"
-            placeholder="youtube.com/shorts/..."
+            placeholder="youtube.com/shorts/... or instagram.com/reel/..."
             value={link}
-            onChange={(e) => setLink(e.target.value)}
+            onChange={(e) => { setLink(e.target.value); setIgFetch('idle'); }}
             spellCheck={false}
           />
 
           <button className="pill pill--primary" disabled={!canProcess} onClick={startProcessing}>
-            Get the chords
+            {igFetch === 'fetching' ? 'Fetching reel…' : 'Get the chords'}
           </button>
         </div>
 

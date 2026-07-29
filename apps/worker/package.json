@@ -1,0 +1,11 @@
+{
+  "name": "@reelchords/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker: edge API (Instagram resolver + signed media proxy) and static hosting for the PWA.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "dev": "wrangler dev --config wrangler.jsonc"
+  }
+}
