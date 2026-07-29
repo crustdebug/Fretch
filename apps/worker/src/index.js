@@ -27,11 +27,24 @@ import {
 } from './resolver.js';
 import { signMediaUrl, verifyMediaUrl } from './sign.js';
 import { identifySong, fetchLyrics } from './music.js';
+import { rateLimit, LIMITS } from './ratelimit.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+function json(body, status = 200, extraHeaders) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: extraHeaders ? { ...JSON_HEADERS, ...extraHeaders } : JSON_HEADERS,
+  });
+}
+
+/** Apply a rate-limit budget; returns a 429 Response when over, else null. */
+async function enforceLimit(request, env, limit) {
+  const { ok, retryAfter } = await rateLimit(request, env, limit);
+  if (ok) return null;
+  return json({ error: 'rate-limited', retryAfter }, 429, {
+    'retry-after': String(retryAfter),
+  });
 }
 
 export default {
@@ -42,7 +55,7 @@ export default {
       return handleResolve(request, env);
     }
     if (url.pathname === '/api/media' && request.method === 'GET') {
-      return handleMedia(url, env);
+      return handleMedia(url, env, request);
     }
     if (url.pathname === '/api/debug-resolve' && request.method === 'GET') {
       return handleDebugResolve(url, env);
@@ -71,6 +84,7 @@ async function handleResolve(request, env) {
   if (typeof reelUrl !== 'string' || !isSupportedUrl(reelUrl.trim())) {
     return json({ error: 'unsupported-url' }, 400);
   }
+  reelUrl = reelUrl.trim();
 
   // Dev shortcut: serve a known same-origin file as the "video".
   if (env.RESOLVER_MOCK_URL) {
@@ -79,12 +93,34 @@ async function handleResolve(request, env) {
 
   // YouTube needs a different provider than the Instagram one; until that's
   // configured, say so plainly rather than sending it to the wrong API.
-  if (YOUTUBE_URL_RE.test(reelUrl.trim()) && !env.YOUTUBE_RESOLVER_HOST) {
+  if (YOUTUBE_URL_RE.test(reelUrl) && !env.YOUTUBE_RESOLVER_HOST) {
     return json({ error: 'youtube-resolver-not-configured' }, 502);
   }
 
+  // Cache before rate-limiting: a repeat of an already-resolved reel costs
+  // no provider quota, so it shouldn't count against the caller's budget.
+  // Resolved CDN URLs are short-lived, so the TTL stays well under the
+  // signature's own expiry.
+  const cacheKey = `resolved:${reelUrl}`;
+  if (env.RATE_LIMIT_KV) {
+    const hit = await env.RATE_LIMIT_KV.get(cacheKey);
+    if (hit) {
+      const { src, exp, sig } = await signMediaUrl(hit, requireSigningKey(env));
+      return json({
+        proxyUrl: `/api/media?src=${encodeURIComponent(src)}&exp=${exp}&sig=${encodeURIComponent(sig)}`,
+        cached: true,
+      });
+    }
+  }
+
+  const limited = await enforceLimit(request, env, LIMITS.resolve);
+  if (limited) return limited;
+
   try {
-    const videoUrl = await resolveInstagram(reelUrl.trim(), env);
+    const videoUrl = await resolveInstagram(reelUrl, env);
+    if (env.RATE_LIMIT_KV) {
+      await env.RATE_LIMIT_KV.put(cacheKey, videoUrl, { expirationTtl: 300 });
+    }
     const { src, exp, sig } = await signMediaUrl(videoUrl, requireSigningKey(env));
     const proxyUrl =
       `/api/media?src=${encodeURIComponent(src)}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
@@ -146,7 +182,10 @@ async function handleDebugResolve(url, env) {
   });
 }
 
-async function handleMedia(url, env) {
+async function handleMedia(url, env, request) {
+  const limited = await enforceLimit(request, env, LIMITS.media);
+  if (limited) return limited;
+
   const src = url.searchParams.get('src');
   const exp = url.searchParams.get('exp');
   const sig = url.searchParams.get('sig');
@@ -180,6 +219,9 @@ async function handleMedia(url, env) {
  * than an error the client has to special-case.
  */
 async function handleIdentify(request, env) {
+  const limited = await enforceLimit(request, env, LIMITS.identify);
+  if (limited) return limited;
+
   try {
     const audio = await request.blob();
     if (!audio || audio.size === 0) return json({ song: null, reason: 'no-audio' });

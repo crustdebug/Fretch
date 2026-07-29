@@ -134,10 +134,12 @@ export default function App() {
   }, []);
 
   const linkInfo = useMemo(() => classifyLink(link), [link]);
-  const [igFetch, setIgFetch] = useState('idle'); // idle | fetching | failed
+  const [igFetch, setIgFetch] = useState('idle'); // idle | fetching | failed | limited
+  // YouTube needs a separate resolver provider that isn't configured, so the
+  // link is recognised but not actionable — say so rather than offering a
+  // button that dead-ends server-side.
   const canProcess =
-    igFetch !== 'fetching' &&
-    (Boolean(video) || linkInfo.kind === 'youtube' || linkInfo.kind === 'instagram');
+    igFetch !== 'fetching' && (Boolean(video) || linkInfo.kind === 'instagram');
 
   async function startProcessing() {
     if (!video && linkInfo.kind === 'instagram') {
@@ -150,6 +152,10 @@ export default function App() {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url: linkInfo.url }),
         });
+        if (res.status === 429) {
+          setIgFetch('limited');
+          return;
+        }
         if (!res.ok) throw new Error(`resolve ${res.status}`);
         const { proxyUrl } = await res.json();
         const media = await fetch(proxyUrl);
@@ -180,33 +186,6 @@ export default function App() {
         blobUrl: video.blobUrl,
       });
       setView('processing');
-      return;
-    }
-
-    // YouTube: resolve server-side to a playable URL, then process the bytes
-    // exactly like any other video.
-    setIgFetch('fetching');
-    try {
-      const res = await fetch('/api/resolve', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: linkInfo.url }),
-      });
-      if (!res.ok) throw new Error(`resolve ${res.status}`);
-      const { proxyUrl } = await res.json();
-      const media = await fetch(proxyUrl);
-      if (!media.ok) throw new Error(`media ${media.status}`);
-      const blob = await media.blob();
-      setIgFetch('idle');
-      setJob({
-        id: linkInfo.id,
-        label: link.trim(),
-        blob,
-        blobUrl: URL.createObjectURL(blob),
-      });
-      setView('processing');
-    } catch {
-      setIgFetch('failed');
     }
   }
 
@@ -324,13 +303,25 @@ export default function App() {
             </div>
           )}
 
-          {linkInfo.kind === 'youtube' && (
-            <div className="panel panel--ok">
-              <strong>✓ YouTube Shorts link recognized</strong>
-              <span>{truncateUrl(link.trim())}</span>
+          {linkInfo.kind === 'youtube' && igFetch !== 'failed' && (
+            <div className="panel panel--dim">
+              <strong>YouTube links aren't supported yet</strong>
+              <span>
+                Download the video and upload it here instead — everything after
+                that works the same.
+              </span>
             </div>
           )}
-          {linkInfo.kind === 'instagram' && igFetch !== 'failed' && (
+          {linkInfo.kind === 'instagram' && igFetch === 'limited' && (
+            <div className="panel panel--dim">
+              <strong>Too many reels for now</strong>
+              <span>
+                Reel fetching is rate-limited to keep costs down. Try again in an
+                hour, or upload a video file — that has no limit.
+              </span>
+            </div>
+          )}
+          {linkInfo.kind === 'instagram' && igFetch !== 'failed' && igFetch !== 'limited' && (
             <div className="panel panel--ok">
               <strong>✓ Instagram reel recognized</strong>
               <span>

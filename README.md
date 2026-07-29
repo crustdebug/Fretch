@@ -55,6 +55,14 @@ Two findings from pre-build spikes shaped the design:
    config, tunable without a redeploy.
    → [spike/FINDINGS_OCR.md](spike/FINDINGS_OCR.md)
 
+## Documentation
+
+- **[How it works](docs/HOW_IT_WORKS.md)** — using the app, and the backend
+  architecture with the reasoning behind it
+- [UI flow spec](docs/UI_FLOW.md) — screens, states, data contracts
+- [PROJECT_PLAN.md](PROJECT_PLAN.md) — the original design
+- [spike/](spike/) — the experiments that shaped it
+
 ## Repo layout
 
 ```

@@ -26,4 +26,15 @@
     "RESOLVER_HOST": "instagram-reels-downloader-api.p.rapidapi.com",
     "RESOLVER_PATH": "/download"
   }
+
+  // OPTIONAL: rate-limit counters + resolved-URL cache.
+  // Without this binding the limiter still runs, but per-isolate and
+  // in-memory — a floor rather than a guarantee — and resolve results are
+  // not cached, so repeats spend provider quota again. To enable:
+  //   npx wrangler kv namespace create RATE_LIMIT_KV
+  // then uncomment, filling in the id it prints:
+  //
+  // "kv_namespaces": [
+  //   { "binding": "RATE_LIMIT_KV", "id": "<id-from-the-command-above>" }
+  // ]
 }
