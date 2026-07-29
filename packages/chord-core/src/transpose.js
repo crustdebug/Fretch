@@ -53,9 +53,11 @@ export function transposeChord(chord, semitones, preferFlat = false) {
 }
 
 /**
- * Transpose every [Chord] marker in a raw ChordPro document, leaving lyrics
- * and directives untouched. Operating on the text (rather than a parsed
- * sheet) means the output is still a valid ChordPro file ready to save.
+ * Transpose a raw ChordPro document: every [Chord] marker moves, and so does
+ * the {key: X} directive — otherwise the document would disagree with its own
+ * chords. Lyrics and all other directives pass through untouched. Operating
+ * on the text (rather than a parsed sheet) means the output is still a valid
+ * ChordPro file ready to save.
  *
  * @param {string} chordproText
  * @param {number} semitones
@@ -63,8 +65,10 @@ export function transposeChord(chord, semitones, preferFlat = false) {
  */
 export function transposeChordPro(chordproText, semitones, preferFlat = false) {
   if (!semitones) return chordproText;
-  return String(chordproText).replace(
-    /\[([^\]]+)\]/g,
-    (_, c) => `[${transposeChord(c, semitones, preferFlat)}]`,
-  );
+  return String(chordproText)
+    .replace(/\[([^\]]+)\]/g, (_, c) => `[${transposeChord(c, semitones, preferFlat)}]`)
+    .replace(
+      /\{(\s*key\s*:\s*)([^}]+?)(\s*)\}/gi,
+      (_, pre, key, post) => `{${pre}${transposeChord(key.trim(), semitones, preferFlat)}${post}}`,
+    );
 }

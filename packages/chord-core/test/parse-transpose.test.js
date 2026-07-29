@@ -131,4 +131,16 @@ describe('transposeChordPro', () => {
     const input = '[Em]x [D6-9/F#]y [Am7/E]z';
     assert.equal(transposeChordPro(transposeChordPro(input, 3), -3), input);
   });
+
+  test('the {key:} directive transposes with the chords', () => {
+    // Caught by a UI drive: chords moved but the key directive stayed put,
+    // so the document disagreed with itself (and the UI showed the old key).
+    const out = transposeChordPro('{key: G}\n[G]la [C]la', 2);
+    assert.match(out, /\{key: A\}/);
+    assert.match(out, /\[A\]la \[D\]la/);
+  });
+
+  test('minor keys transpose too', () => {
+    assert.match(transposeChordPro('{key: Em}\n[Em]x', 2), /\{key: F#m\}/);
+  });
 });

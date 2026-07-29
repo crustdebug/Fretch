@@ -1,7 +1,12 @@
 import { useState } from 'react';
+import { parseChordPro } from '@reelchords/chord-core';
 import { listSongs, deleteSong } from '../songbook.js';
 
-export default function SongbookView({ onOpen, onBack }) {
+/**
+ * The library — paper ground, key-letter badges on dark tiles (from the
+ * design prototype: no cover art exists, the musical key is the identity).
+ */
+export default function SongbookView({ onOpen, onAdd }) {
   const [songs, setSongs] = useState(listSongs);
 
   function onDelete(id) {
@@ -10,38 +15,43 @@ export default function SongbookView({ onOpen, onBack }) {
   }
 
   return (
-    <div>
-      <button className="linklike" onClick={onBack}>← back</button>
-      <h2>Songbook</h2>
+    <>
+      <div className="songbook-head">
+        <h2>Songbook</h2>
+      </div>
 
       {songs.length === 0 ? (
-        <div className="card empty">
-          <p>Nothing saved yet.</p>
-          <p className="muted">Process a tutorial and hit “Save to songbook”.</p>
+        <div className="songbook-empty">
+          <div className="glyph" aria-hidden="true">♫</div>
+          <h3>Nothing saved yet</h3>
+          <p>Process a tutorial and hit save — this is where every chord sheet lives.</p>
+          <button className="pill pill--solid" onClick={onAdd}>Add your first tutorial</button>
         </div>
       ) : (
-        <ul className="songlist">
+        <div className="songlist">
           {songs.map((song) => (
-            <li key={song.id} className="card songrow">
-              <button className="songmain" onClick={() => onOpen(song)}>
-                <strong>{song.title}</strong>
-                <span className="muted">
-                  {song.artist}
-                  {song.artist && ' · '}
-                  {new Date(song.savedAt).toLocaleDateString()}
+            <div key={song.id} className="songrow">
+              <button className="main" onClick={() => onOpen(song)}>
+                <span className="keybadge">{parseChordPro(song.chordpro).key ?? '♪'}</span>
+                <span className="info">
+                  <strong>{song.title}</strong>
+                  <span>
+                    {song.artist || 'Unknown artist'} ·{' '}
+                    {new Date(song.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
                 </span>
               </button>
               <button
-                className="danger"
+                className="remove"
                 aria-label={`Delete ${song.title}`}
                 onClick={() => onDelete(song.id)}
               >
                 ✕
               </button>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
-    </div>
+    </>
   );
 }
