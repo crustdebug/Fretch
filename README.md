@@ -11,24 +11,36 @@ guessing chords from audio — so the output matches what's actually being taugh
 
 ## Status
 
-Early development. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full design.
+Working end to end on real videos. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for
+the full design.
 
 | Phase | Scope | State |
 |---|---|---|
-| Spikes | de-risk acquisition + OCR | ✅ done — [findings](spike/) |
-| 0 | monorepo, chord-core, CI | 🚧 in progress |
-| 1 | vertical slice: song ID + lyrics | ⬜ |
-| 2 | frame extraction + OCR pipeline | ⬜ |
+| Spikes | de-risk acquisition + OCR | ✅ [findings](spike/) |
+| 0 | monorepo, chord-core, CI | ✅ |
+| 1 | edge API: reel resolver, song ID, lyrics | ✅ |
+| 2 | frame extraction + OCR pipeline | ✅ |
 | 3 | async queue, caching, speed | ⬜ |
-| 4 | songbook + PWA polish | ⬜ |
-| 5 | hardening + docs | ⬜ |
+| 4 | accounts + cloud songbook | ⬜ |
+| 5 | hardening + observability | ⬜ |
+
+Verified against the Spike 2 tutorial video: extracts `Em` and `D6-9/F#`,
+matching the ground truth in [spike/FINDINGS_OCR.md](spike/FINDINGS_OCR.md).
 
 ## How it works
 
 ```
-share video ──► frame sampling ──► OCR ──► chord-grammar filter ──► ChordPro
-                    (ffmpeg)     (Tesseract)   (chord-core)
+video ──► frame sampling ──► OCR ──► chord-grammar filter ──► ChordPro
+        (<video> + canvas)  (Tesseract.js/WASM)  (chord-core)
+                    │
+                    └──► audio excerpt ──► AudD ──► LRCLIB lyrics
 ```
+
+The whole visual pipeline runs **in the browser**: the page decodes the
+video, samples ~1 fps, crops to the region where chord overlays live, and
+OCRs each frame in WebAssembly. The Worker is called only for the two things
+that genuinely need a server — the AudD token (must not ship to clients) and
+LRCLIB (sends no CORS headers). Nothing costs per request.
 
 Two findings from pre-build spikes shaped the design:
 
@@ -46,13 +58,14 @@ Two findings from pre-build spikes shaped the design:
 ## Repo layout
 
 ```
-apps/pwa/            Vite + React PWA — share target, WASM OCR fast path
-apps/worker/         Cloudflare Worker — edge API, cache, orchestration
-services/processor/  AWS Lambda — frame extraction, OCR fallback, assembly
-packages/chord-core/ shared chord grammar + ChordPro builder (zero deps)
-infra/cloudflare/    wrangler config, KV/R2 bindings
-infra/aws/           Lambda, SQS, DynamoDB definitions
+apps/pwa/            Vite + React PWA — share target, pipeline, UI
+  src/pipeline/      frames · ocr · audio · orchestration
+apps/worker/         Cloudflare Worker — edge API + static hosting
+  src/resolver.js    third-party reel resolver (pluggable provider)
+  src/music.js       AudD song ID + LRCLIB lyrics
+packages/chord-core/ chord grammar, ChordPro build/parse, transpose (zero deps)
 spike/               throwaway experiments + their findings
+docs/                UI flow spec, design prototype
 ```
 
 ## Development
@@ -60,14 +73,36 @@ spike/               throwaway experiments + their findings
 Requires Node ≥ 20.
 
 ```bash
-npm install          # install all workspaces
-npm test             # run all tests
+npm install                                    # all workspaces
+npm test                                       # all tests
+npm run build --workspace apps/pwa             # build the PWA
+npx wrangler dev --config apps/worker/wrangler.jsonc   # API + app on :8787
 ```
 
 `packages/chord-core` has no runtime dependencies and can be tested alone:
 
 ```bash
 npm test --workspace packages/chord-core
+```
+
+### Configuration
+
+The app degrades gracefully — without any of these it still extracts chords
+from uploaded videos.
+
+| Variable | Type | Purpose |
+|---|---|---|
+| `RESOLVER_HOST` / `RESOLVER_PATH` | var | Instagram reel resolver endpoint |
+| `RESOLVER_API_KEY` | secret | resolver API key |
+| `SIGNING_KEY` | secret | signs media-proxy URLs (any long random string) |
+| `AUDD_API_TOKEN` | secret | song identification; without it, sheets are chords-only |
+| `DEBUG_KEY` | secret | enables `/api/debug-resolve` for diagnosing provider responses |
+
+### Deploy
+
+```bash
+npm ci && npm run build --workspace apps/pwa      # build command
+npx wrangler deploy --config apps/worker/wrangler.jsonc   # deploy command
 ```
 
 ### Spike scripts
