@@ -20,10 +20,10 @@
     "run_worker_first": ["/api/*"]
   },
   "vars": {
-    // Hostname of the third-party Instagram resolver (RapidAPI-style).
+    // Third-party Instagram resolver (RapidAPI-style: GET ?url=<reel>).
     // Providers churn; swapping providers should only mean changing these
     // two values plus the secret — never code.
-    "RESOLVER_HOST": "",
-    "RESOLVER_PATH": "/"
+    "RESOLVER_HOST": "instagram-reels-downloader-api.p.rapidapi.com",
+    "RESOLVER_PATH": "/download"
   }
 }

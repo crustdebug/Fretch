@@ -17,7 +17,7 @@
  * without a provider account.
  */
 
-import { INSTAGRAM_URL_RE, resolveInstagram, ResolverError } from './resolver.js';
+import { INSTAGRAM_URL_RE, extractVideoUrl, resolveInstagram, ResolverError } from './resolver.js';
 import { signMediaUrl, verifyMediaUrl } from './sign.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
@@ -35,6 +35,9 @@ export default {
     }
     if (url.pathname === '/api/media' && request.method === 'GET') {
       return handleMedia(url, env);
+    }
+    if (url.pathname === '/api/debug-resolve' && request.method === 'GET') {
+      return handleDebugResolve(url, env);
     }
     if (url.pathname.startsWith('/api/')) {
       return json({ error: 'not-found' }, 404);
@@ -68,9 +71,59 @@ async function handleResolve(request, env) {
     return json({ proxyUrl });
   } catch (err) {
     const reason = err instanceof ResolverError ? err.reason : 'resolver-failed';
+    const detail = err instanceof ResolverError ? err.detail : String(err?.message ?? err);
+    // Logged so `wrangler tail` shows what the provider actually returned —
+    // the quota is small, so one failed call must be enough to diagnose.
+    console.error('resolve failed:', reason, detail ?? '');
     // 502: upstream problem, the client should fall back to manual guidance.
-    return json({ error: reason }, 502);
+    return json({ error: reason, detail }, 502);
   }
+}
+
+/**
+ * Return the provider's raw JSON alongside what the extractor made of it.
+ *
+ * Exists because the provider quota is small: rather than burn several
+ * calls guessing at an unknown response shape, one call to this endpoint
+ * shows the payload and whether extraction worked.
+ *
+ * Guarded by DEBUG_KEY so it can't be used to spend quota anonymously;
+ * unset means disabled.
+ *   /api/debug-resolve?key=<DEBUG_KEY>&url=<reel-url>
+ */
+async function handleDebugResolve(url, env) {
+  if (!env.DEBUG_KEY || url.searchParams.get('key') !== env.DEBUG_KEY) {
+    return json({ error: 'not-found' }, 404);
+  }
+  const reelUrl = url.searchParams.get('url') ?? '';
+  if (!INSTAGRAM_URL_RE.test(reelUrl)) return json({ error: 'not-an-instagram-url' }, 400);
+  if (!env.RESOLVER_HOST || !env.RESOLVER_API_KEY) {
+    return json({ error: 'resolver-not-configured' }, 500);
+  }
+
+  const endpoint = new URL(`https://${env.RESOLVER_HOST}${env.RESOLVER_PATH || '/'}`);
+  endpoint.searchParams.set('url', reelUrl);
+  const res = await fetch(endpoint, {
+    headers: {
+      'x-rapidapi-key': env.RESOLVER_API_KEY,
+      'x-rapidapi-host': env.RESOLVER_HOST,
+      accept: 'application/json',
+    },
+  });
+
+  const text = await res.text();
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    /* leave null; raw text is returned below */
+  }
+
+  return json({
+    status: res.status,
+    extracted: parsed ? extractVideoUrl(parsed) : null,
+    body: parsed ?? text.slice(0, 4000),
+  });
 }
 
 async function handleMedia(url, env) {

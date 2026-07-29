@@ -95,13 +95,28 @@ export async function resolveInstagram(reelUrl, env, fetchImpl = fetch) {
   }
 
   const videoUrl = extractVideoUrl(json);
-  if (!videoUrl) throw new ResolverError('no-video-in-response');
+  if (!videoUrl) {
+    // Carry a trimmed copy of the payload: with a tight monthly quota, one
+    // failed call has to be enough to diagnose the provider's actual shape.
+    throw new ResolverError('no-video-in-response', summarise(json));
+  }
   return videoUrl;
 }
 
+/** Compact preview of an unexpected payload, safe to surface in an error. */
+function summarise(json, limit = 600) {
+  try {
+    const s = JSON.stringify(json);
+    return s.length > limit ? `${s.slice(0, limit)}…` : s;
+  } catch {
+    return String(json).slice(0, limit);
+  }
+}
+
 export class ResolverError extends Error {
-  constructor(reason) {
+  constructor(reason, detail) {
     super(reason);
     this.reason = reason;
+    this.detail = detail;
   }
 }
