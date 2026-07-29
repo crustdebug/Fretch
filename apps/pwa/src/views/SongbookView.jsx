@@ -25,7 +25,7 @@ export default function SongbookView({ onOpen, onAdd }) {
           <div className="glyph" aria-hidden="true">♫</div>
           <h3>Nothing saved yet</h3>
           <p>Process a tutorial and hit save — this is where every chord sheet lives.</p>
-          <button className="pill pill--solid" onClick={onAdd}>Add your first tutorial</button>
+          <button className="pill pill--primary" onClick={onAdd}>Add your first tutorial</button>
         </div>
       ) : (
         <div className="songlist">

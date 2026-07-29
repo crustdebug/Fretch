@@ -8,9 +8,7 @@ import SongbookView from './views/SongbookView.jsx';
  * View flow:  home → processing → sheet
  *                └→ songbook ────→ sheet (saved copy)
  *
- * Visual design implemented from docs/design/ReelChords-UI.jsx:
- * dark teal "doing" screens (home, processing), warm paper "reading"
- * screens (sheet, songbook), amber accent, pill bottom-nav.
+ * Minimal visual system: one light ground, ink text, single teal accent.
  */
 
 const YOUTUBE_RE = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{6,})/;
@@ -34,6 +32,47 @@ function truncateUrl(url, max = 34) {
   return url.length > max ? url.slice(0, max) + '…' : url;
 }
 
+/**
+ * PWA install affordance.
+ *
+ * Browsers hide their install entry deep in menus, so we surface our own:
+ * Chrome/Edge fire `beforeinstallprompt` when the app is installable — we
+ * stash the event and offer an Install button that triggers the native
+ * dialog. iOS Safari has no such event (or share-target support), so it
+ * gets a one-line Add-to-Home-Screen hint instead.
+ */
+function useInstall() {
+  const [promptEvent, setPromptEvent] = useState(null);
+  const [standalone, setStandalone] = useState(
+    () => window.matchMedia('(display-mode: standalone)').matches,
+  );
+
+  useEffect(() => {
+    const onPrompt = (e) => {
+      e.preventDefault();
+      setPromptEvent(e);
+    };
+    const onInstalled = () => {
+      setPromptEvent(null);
+      setStandalone(true);
+    };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return {
+    canInstall: Boolean(promptEvent),
+    install: () => promptEvent?.prompt(),
+    showIosHint: isIos && !standalone,
+    standalone,
+  };
+}
+
 export default function App() {
   const [view, setView] = useState('home'); // home | processing | sheet | songbook
   const [link, setLink] = useState('');
@@ -41,6 +80,7 @@ export default function App() {
   const [shareState, setShareState] = useState(null); // null | 'failed'
   const [job, setJob] = useState(null);
   const [result, setResult] = useState(null);
+  const { canInstall, install, showIosHint } = useInstall();
 
   // Collect anything the service worker left in the share inbox
   // (i.e. the app was opened from the Android share sheet).
@@ -88,25 +128,36 @@ export default function App() {
     setVideo({ name: file.name, size: file.size, type: file.type, blobUrl: URL.createObjectURL(file) });
   }
 
+  const topbar = (
+    <header className="topbar">
+      <span className="wordmark">
+        ReelChords<span className="dot">.</span>
+      </span>
+      {canInstall && (
+        <button className="installbtn" onClick={install}>
+          Install app
+        </button>
+      )}
+    </header>
+  );
+
   const nav = (
-    <nav className={`bottomnav-wrap ${view === 'songbook' || view === 'sheet' ? 'navwrap--paper' : ''}`}>
-      <div className="bottomnav">
-        <button className={view === 'home' ? 'active' : ''} onClick={() => setView('home')}>
-          <span className="navicon">⌂</span>
-          {view === 'home' && 'Home'}
-        </button>
-        <button className={view === 'songbook' ? 'active' : ''} onClick={() => setView('songbook')}>
-          <span className="navicon">♫</span>
-          {view === 'songbook' && 'Songbook'}
-        </button>
-      </div>
+    <nav className="bottomnav">
+      <button className={view === 'home' ? 'active' : ''} onClick={() => setView('home')}>
+        <span className="navicon">⌂</span>
+        Home
+      </button>
+      <button className={view === 'songbook' ? 'active' : ''} onClick={() => setView('songbook')}>
+        <span className="navicon">♫</span>
+        Songbook
+      </button>
     </nav>
   );
 
   if (view === 'processing') {
     return (
       <div className="app">
-        <div className="screen screen--dark">
+        <div className="screen">
           <ProcessingView
             input={job}
             onDone={(res) => { setResult(res); setView('sheet'); }}
@@ -120,7 +171,7 @@ export default function App() {
   if (view === 'sheet' && result) {
     return (
       <div className="app">
-        <div className="screen screen--paper">
+        <div className="screen">
           <SheetView result={result} onBack={() => setView('home')} />
         </div>
       </div>
@@ -130,7 +181,8 @@ export default function App() {
   if (view === 'songbook') {
     return (
       <div className="app">
-        <div className="screen screen--paper">
+        {topbar}
+        <div className="screen">
           <SongbookView
             onOpen={(song) => { setResult(song); setView('sheet'); }}
             onAdd={() => setView('home')}
@@ -143,11 +195,18 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="screen screen--dark home">
-        <header className="home-hero">
-          <div className="eyebrow">REELCHORDS</div>
+      {topbar}
+      <div className="screen">
+        <div className="home-hero">
           <h1>Turn any guitar reel into a chord sheet.</h1>
-        </header>
+          <p className="sub">Reads the chords the creator put on screen.</p>
+        </div>
+
+        {showIosHint && (
+          <p className="ios-hint">
+            To install on iPhone: tap Share, then “Add to Home Screen”.
+          </p>
+        )}
 
         <div className="home-body">
           {video ? (
@@ -207,7 +266,7 @@ export default function App() {
         </div>
 
         <div className="home-cta">
-          <button className="pill pill--amber" disabled={!canProcess} onClick={startProcessing}>
+          <button className="pill pill--primary" disabled={!canProcess} onClick={startProcessing}>
             Get the chords
           </button>
         </div>
@@ -221,8 +280,7 @@ export default function App() {
 
 /**
  * Live window into @reelchords/chord-core — the same filter the pipeline
- * uses. Tucked behind a disclosure so it reads as a "how it works" flourish
- * rather than part of the main flow.
+ * uses. A quiet disclosure so it reads as "how it works", not main flow.
  */
 function GrammarDemo() {
   const [input, setInput] = useState('Em  D6-9/F#  Arn  FOLLOW  1002  Cadd9');

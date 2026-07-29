@@ -37,8 +37,8 @@ export default function ProcessingView({ input, onDone, onCancel }) {
           <div className="glyph" aria-hidden="true">◐</div>
           <h2>{error.title}</h2>
           <p>{error.detail}</p>
-          <button className="pill pill--amber" onClick={onCancel}>Try another video</button>
-          <button className="pill pill--ghost">What works best?</button>
+          <button className="pill pill--primary" onClick={onCancel}>Try another video</button>
+          <button className="pill pill--quiet">What works best?</button>
         </div>
       </div>
     );

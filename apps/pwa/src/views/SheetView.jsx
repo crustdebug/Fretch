@@ -93,11 +93,11 @@ export default function SheetView({ result, onBack }) {
       </div>
 
       <div className="sheet-actions">
-        <button className="pill pill--ghost-dark" onClick={onCopy}>
+        <button className="pill pill--quiet" onClick={onCopy}>
           {copied ? 'Copied ✓' : 'Copy ChordPro'}
         </button>
         <button
-          className={`pill ${saved ? 'pill--ghost-dark' : 'pill--solid'}`}
+          className={`pill ${saved ? 'pill--quiet' : 'pill--primary'}`}
           onClick={onSave}
           disabled={saved}
         >
