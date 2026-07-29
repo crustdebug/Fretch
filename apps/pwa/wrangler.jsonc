@@ -1,0 +1,17 @@
+// Cloudflare Workers static-assets deployment for the PWA.
+//
+// This is an assets-only Worker (no server code): Cloudflare serves dist/
+// from its edge. The Cloudflare build must run from the repo root so npm
+// workspaces resolve, then deploy with:
+//   npx wrangler deploy --config apps/pwa/wrangler.jsonc
+{
+  "name": "reelchords",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    // Relative to this config file.
+    "directory": "./dist",
+    // Unknown paths fall back to index.html — required for a single-page
+    // app so /share-target and /?share=video resolve after a redirect.
+    "not_found_handling": "single-page-application"
+  }
+}
