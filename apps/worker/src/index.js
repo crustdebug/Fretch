@@ -21,6 +21,7 @@ import {
   INSTAGRAM_URL_RE,
   YOUTUBE_URL_RE,
   isSupportedUrl,
+  extractSupportedUrl,
   extractVideoUrl,
   resolveInstagram,
   ResolverError,
@@ -81,10 +82,13 @@ async function handleResolve(request, env) {
     return json({ error: 'bad-request' }, 400);
   }
 
-  if (typeof reelUrl !== 'string' || !isSupportedUrl(reelUrl.trim())) {
-    return json({ error: 'unsupported-url' }, 400);
+  // Accept shared text, not just a bare URL: Instagram's share sheet often
+  // sends "Check this out <url>". Extract the URL rather than rejecting.
+  const extracted = typeof reelUrl === 'string' ? extractSupportedUrl(reelUrl) : null;
+  if (!extracted) {
+    return json({ error: 'unsupported-url', received: String(reelUrl).slice(0, 200) }, 400);
   }
-  reelUrl = reelUrl.trim();
+  reelUrl = extracted;
 
   // Dev shortcut: serve a known same-origin file as the "video".
   if (env.RESOLVER_MOCK_URL) {

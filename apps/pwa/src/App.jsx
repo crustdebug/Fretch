@@ -11,19 +11,24 @@ import SongbookView from './views/SongbookView.jsx';
  * Minimal visual system: one light ground, ink text, single teal accent.
  */
 
-const YOUTUBE_RE = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{6,})/;
-const INSTAGRAM_RE = /instagram\.com\/(?:reel|reels|p)\/([\w-]+)/;
+const YOUTUBE_RE = /https?:\/\/(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{6,})/;
+// Mirrors the Worker's pattern (apps/worker/src/resolver.js). Both must
+// accept the same shapes — a client that recognises a share the server then
+// rejects produces exactly the "recognized, but fetch failed" dead end.
+const INSTAGRAM_RE = /https?:\/\/(?:www\.)?instagram\.com\/(?:share\/)?(?:reel|reels|p|tv)\/([\w-]+)/;
 
 function classifyLink(raw) {
-  const url = raw.trim();
-  if (!url) return { kind: 'empty' };
-  const ig = url.match(INSTAGRAM_RE);
-  if (ig) return { kind: 'instagram', url, id: `ig-${ig[1]}` };
-  const yt = url.match(YOUTUBE_RE);
-  if (yt) return { kind: 'youtube', url, id: `yt-${yt[1]}` };
+  const text = raw.trim();
+  if (!text) return { kind: 'empty' };
+
+  // Shared text often wraps the URL in a sentence; send the URL alone.
+  const ig = text.match(INSTAGRAM_RE);
+  if (ig) return { kind: 'instagram', url: ig[0], id: `ig-${ig[1]}` };
+  const yt = text.match(YOUTUBE_RE);
+  if (yt) return { kind: 'youtube', url: yt[0], id: `yt-${yt[1]}` };
   try {
-    new URL(url);
-    return { kind: 'unknown-url', url };
+    new URL(text);
+    return { kind: 'unknown-url', url: text };
   } catch {
     return { kind: 'not-a-url' };
   }
@@ -31,6 +36,34 @@ function classifyLink(raw) {
 
 function truncateUrl(url, max = 34) {
   return url.length > max ? url.slice(0, max) + '…' : url;
+}
+
+/**
+ * Turn the Worker's error code into something a person can act on.
+ * "It didn't work" tells the user nothing about whether to retry, change
+ * reel, or check configuration.
+ */
+function explainResolveError(code, status) {
+  switch (code) {
+    case 'resolver-not-configured':
+      return 'Reel fetching isn’t set up on the server yet.';
+    case 'no-video-in-response':
+      return 'The reel was found but no video came back — it may be private, or a photo post.';
+    case 'unsupported-url':
+      return 'That link isn’t a reel URL we recognise.';
+    case 'provider-not-json':
+      return 'The download service returned something unexpected.';
+    default:
+      if (code?.startsWith('provider-http-')) {
+        const upstream = code.replace('provider-http-', '');
+        if (upstream === '429') return 'The download service is rate-limiting us. Try again shortly.';
+        if (upstream === '401' || upstream === '403') {
+          return 'The download service rejected our API key.';
+        }
+        return `The download service returned an error (${upstream}).`;
+      }
+      return `Couldn’t fetch this reel (error ${status}).`;
+  }
 }
 
 /**
@@ -135,6 +168,7 @@ export default function App() {
 
   const linkInfo = useMemo(() => classifyLink(link), [link]);
   const [igFetch, setIgFetch] = useState('idle'); // idle | fetching | failed | limited
+  const [igError, setIgError] = useState(''); // why the fetch failed, for the user
   // YouTube needs a separate resolver provider that isn't configured, so the
   // link is recognised but not actionable — say so rather than offering a
   // button that dead-ends server-side.
@@ -156,11 +190,23 @@ export default function App() {
           setIgFetch('limited');
           return;
         }
-        if (!res.ok) throw new Error(`resolve ${res.status}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(explainResolveError(body.error, res.status));
+        }
         const { proxyUrl } = await res.json();
         const media = await fetch(proxyUrl);
-        if (!media.ok) throw new Error(`media ${media.status}`);
+        if (!media.ok) {
+          throw new Error(
+            media.status === 403
+              ? 'The download link expired before it could be used. Try again.'
+              : `The video couldn't be downloaded (error ${media.status}).`,
+          );
+        }
         const blob = await media.blob();
+        if (blob.size < 10_000) {
+          throw new Error('The download came back empty — this reel may be private.');
+        }
         const fetched = {
           name: 'instagram-reel.mp4',
           blob,
@@ -172,7 +218,8 @@ export default function App() {
         setIgFetch('idle');
         setJob({ id: linkInfo.id, label: linkInfo.url, blob, blobUrl: fetched.blobUrl });
         setView('processing');
-      } catch {
+      } catch (err) {
+        setIgError(err?.message ?? '');
         setIgFetch('failed');
       }
       return;
@@ -333,8 +380,8 @@ export default function App() {
           )}
           {linkInfo.kind === 'instagram' && igFetch === 'failed' && (
             <div className="panel panel--guide">
-              <div className="url">{truncateUrl(link.trim())}</div>
-              <p><strong>Automatic fetch didn't work for this reel.</strong></p>
+              <div className="url">{truncateUrl(linkInfo.url ?? link.trim())}</div>
+              <p><strong>{igError || "Automatic fetch didn't work for this reel."}</strong></p>
               <ol>
                 <li>In Instagram, tap <strong>Share → Download</strong> to save the reel to your gallery.</li>
                 <li>Come back here and <strong>Choose a video</strong> — or share the saved video from your gallery to ReelChords.</li>
@@ -354,7 +401,7 @@ export default function App() {
             type="url"
             placeholder="youtube.com/shorts/... or instagram.com/reel/..."
             value={link}
-            onChange={(e) => { setLink(e.target.value); setIgFetch('idle'); }}
+            onChange={(e) => { setLink(e.target.value); setIgFetch('idle'); setIgError(''); }}
             spellCheck={false}
           />
 

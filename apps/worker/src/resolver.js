@@ -8,9 +8,26 @@
  * and (b) defensive about response shape.
  */
 
-export const INSTAGRAM_URL_RE = /^https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels|p)\/[\w-]+/;
+/**
+ * Instagram URL shapes we accept. Not anchored to the start of the string:
+ * Instagram's share sheet frequently sends a sentence ("Check this out
+ * <url>") rather than a bare URL, and `/share/reel/<id>` is its newer
+ * short-link form. Anchoring here was a real bug — the client recognised
+ * such a share and the server then rejected it as unsupported.
+ */
+export const INSTAGRAM_URL_RE =
+  /https?:\/\/(?:www\.)?instagram\.com\/(?:share\/)?(?:reel|reels|p|tv)\/[\w-]+\/?(?:\?[^\s]*)?/;
 export const YOUTUBE_URL_RE =
-  /^https?:\/\/(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]{6,}/;
+  /https?:\/\/(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]{6,}/;
+
+/**
+ * Pull the first supported media URL out of arbitrary shared text.
+ * @returns {string|null} the bare URL, or null if there isn't one
+ */
+export function extractSupportedUrl(text) {
+  const s = String(text ?? '');
+  return s.match(INSTAGRAM_URL_RE)?.[0] ?? s.match(YOUTUBE_URL_RE)?.[0] ?? null;
+}
 
 /** Any source we can attempt to resolve server-side. */
 export function isSupportedUrl(url) {

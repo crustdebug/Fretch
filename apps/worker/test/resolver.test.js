@@ -1,17 +1,65 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractVideoUrl, INSTAGRAM_URL_RE, resolveInstagram, ResolverError } from '../src/resolver.js';
+import {
+  extractVideoUrl,
+  extractSupportedUrl,
+  INSTAGRAM_URL_RE,
+  resolveInstagram,
+  ResolverError,
+} from '../src/resolver.js';
 
 describe('INSTAGRAM_URL_RE', () => {
-  test('matches reel, reels and p URLs', () => {
+  test('matches reel, reels, p and tv URLs', () => {
     assert.ok(INSTAGRAM_URL_RE.test('https://www.instagram.com/reel/DAhKpJqSxNM/'));
     assert.ok(INSTAGRAM_URL_RE.test('https://instagram.com/reels/Abc_123-x/'));
     assert.ok(INSTAGRAM_URL_RE.test('https://www.instagram.com/p/Xyz789/'));
+    assert.ok(INSTAGRAM_URL_RE.test('https://www.instagram.com/tv/Xyz789/'));
   });
-  test('rejects other hosts and paths', () => {
+
+  test("matches Instagram's /share/ short links", () => {
+    assert.ok(INSTAGRAM_URL_RE.test('https://www.instagram.com/share/reel/_abc123XY'));
+  });
+
+  test('rejects other hosts and non-post paths', () => {
     assert.ok(!INSTAGRAM_URL_RE.test('https://www.youtube.com/shorts/abc'));
-    assert.ok(!INSTAGRAM_URL_RE.test('https://evil.com/https://instagram.com/reel/x'));
     assert.ok(!INSTAGRAM_URL_RE.test('https://www.instagram.com/someuser/'));
+  });
+});
+
+describe('extractSupportedUrl — shared text, not just bare URLs', () => {
+  // Regression: the share sheet sends a sentence, the client's loose match
+  // recognised it, and the server's anchored match rejected it — surfacing
+  // as "recognized, but automatic fetch didn't work".
+  test('pulls the URL out of surrounding text', () => {
+    assert.equal(
+      extractSupportedUrl('Check this out https://www.instagram.com/reel/DAhKpJqSxNM/ 🔥'),
+      'https://www.instagram.com/reel/DAhKpJqSxNM/',
+    );
+  });
+
+  test('handles a bare URL unchanged', () => {
+    const u = 'https://www.instagram.com/reel/DAhKpJqSxNM/';
+    assert.equal(extractSupportedUrl(u), u);
+  });
+
+  test('keeps tracking query strings the CDN may need', () => {
+    assert.match(
+      extractSupportedUrl('https://instagram.com/reel/ABC123/?igsh=xyz'),
+      /^https:\/\/instagram\.com\/reel\/ABC123/,
+    );
+  });
+
+  test('finds YouTube links too', () => {
+    assert.equal(
+      extractSupportedUrl('watch https://www.youtube.com/shorts/wputiDZGBg4 now'),
+      'https://www.youtube.com/shorts/wputiDZGBg4',
+    );
+  });
+
+  test('returns null when there is no supported URL', () => {
+    assert.equal(extractSupportedUrl('just some text'), null);
+    assert.equal(extractSupportedUrl('https://example.com/video.mp4'), null);
+    assert.equal(extractSupportedUrl(null), null);
   });
 });
 
